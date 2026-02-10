@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+<head>
+    <meta charset="UTF-8">
+    <title>Will you be my Valentine?</title>
+    <style>
+        body {
+            background-color: #ffe6eb;
+            font-family: "Pretendard", -apple-system, BlinkMacSystemFont,
+                 "Apple SD Gothic Neo", "Noto Sans KR",
+                 "Segoe UI", sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            text-align: center;
+        }
+
+        img {
+            width: 250px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #d6336c;
+        }
+
+        button {
+            font-size: 18px;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+        }
+
+        #yesBtn {
+            background-color: #ff4d6d;
+            color: white;
+        }
+
+        #noBtn {
+            background-color: #adb5bd;
+            color: white;
+            position: absolute;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <img id="gif" src="https://media1.tenor.com/m/3eKqeFdvzjUAAAAC/red-panda-kiss-cute-cute.gif">
+    <h1 id="question">내 발렌타인이 되어 줄랭?</h1>
+    <button id="yesBtn">응 💕</button>
+    <button id="noBtn">아니;;;내가 왜</button>
+</div>
+
+<script>
+    const noBtn = document.getElementById("noBtn");
+    const yesBtn = document.getElementById("yesBtn");
+    const gif = document.getElementById("gif");
+    const question = document.getElementById("question");
+
+    // No 버튼 도망치기
+    noBtn.addEventListener("mouseover", () => {
+        const x = Math.random() * (window.innerWidth - 100);
+        const y = Math.random() * (window.innerHeight - 50);
+        noBtn.style.left = `${x}px`;
+        noBtn.style.top = `${y}px`;
+    });
+
+    // Yes 클릭 시 성공 상태
+    yesBtn.addEventListener("click", () => {
+        gif.src = "https://media.tenor.com/RDsELWjwar0AAAAi/chiikawa.gif";
+        question.innerText = "헤헤 당연히 눌러야징 바부야";
+        yesBtn.style.display = "none";
+        noBtn.style.display = "none";
+    });
+</script>
+
+</body>
+</html>
