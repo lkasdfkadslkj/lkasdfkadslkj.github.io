@@ -97,11 +97,27 @@
     mirror.style.height = "0px";
     mirror.srcdoc = withInert;
     mirror.onload = () => {
+      let doc;
       try {
-        mirror.style.height = mirror.contentDocument.documentElement.scrollHeight + "px";
+        doc = mirror.contentDocument;
       } catch {
         mirror.style.height = "2000px";
+        return;
       }
+
+      const resize = () => { mirror.style.height = doc.documentElement.scrollHeight + "px"; };
+      resize();
+
+      // Images are eager-loaded (server-side), so by the time `load` fires
+      // they should already be done — but re-measure on each one anyway as
+      // a safety net against any that were still mid-flight, so the frame
+      // never ends up shorter than the content it's showing.
+      Array.from(doc.images).forEach((img) => {
+        if (!img.complete) {
+          img.addEventListener("load", resize, { once: true });
+          img.addEventListener("error", resize, { once: true });
+        }
+      });
     };
   }
 
