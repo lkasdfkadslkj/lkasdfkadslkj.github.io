@@ -1,0 +1,16 @@
+# Cloudflare Workers local state/cache (account id, dev session data) — never commit
+worker/.wrangler/
+
+# Dependencies — reinstalled via `npm install`, never commit
+worker/node_modules/
+
+# Local-only secrets — the real ENCRYPTION_KEY only ever lives in
+# `wrangler secret put`, never in a file, but ignore these by pattern anyway
+worker/.dev.vars
+worker/.dev.vars.*
+.env
+.env.*
+
+# Editor/OS cruft
+.DS_Store
+Thumbs.db

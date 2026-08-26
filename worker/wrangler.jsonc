@@ -1,0 +1,13 @@
+{
+  "name": "mirrorlog",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-26",
+  "durable_objects": {
+    "bindings": [
+      { "name": "RATE_LIMITER_DO", "class_name": "RateLimiterDO" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RateLimiterDO"] }
+  ]
+}
