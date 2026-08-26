@@ -137,6 +137,22 @@ export class RateLimiterDO extends DurableObject {
   }
 }
 
+// Per-IP limits alone don't protect Cloudflare's account-wide daily request
+// quota (100,000/day, shared with every other Worker on the account) — the
+// Worker URL is visible to anyone who opens devtools on the frontend, and a
+// single IP at 1 req/s already adds up to ~86,400 req/day, with no cap at
+// all if the attacker spreads requests across IPs. This is a second,
+// IP-independent counter that all requests share, so total abuse is capped
+// regardless of how many IPs it comes from.
+const DAILY_BUDGET_LIMIT = 50000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+async function checkDailyBudget(env) {
+  const id = env.RATE_LIMITER_DO.idFromName("daily-budget");
+  const stub = env.RATE_LIMITER_DO.get(id);
+  return stub.check(DAILY_BUDGET_LIMIT, ONE_DAY_MS);
+}
+
 // `bucket` keeps /read and /img on separate counters (one page view fires
 // many image requests near-simultaneously, so they need a looser allowance
 // than the page-load endpoint itself).
@@ -144,7 +160,8 @@ async function checkRateLimit(env, bucket, request, limit, windowMs) {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   const id = env.RATE_LIMITER_DO.idFromName(`${bucket}:${ip}`);
   const stub = env.RATE_LIMITER_DO.get(id);
-  return stub.check(limit, windowMs);
+  if (!(await stub.check(limit, windowMs))) return false;
+  return checkDailyBudget(env);
 }
 
 function corsHeaders(extra = {}) {
