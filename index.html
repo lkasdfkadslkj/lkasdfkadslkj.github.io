@@ -23,12 +23,14 @@
   /* The fetched post renders inside a sandboxed iframe (its own document,
      with Naver's original stylesheets intact) instead of being spliced
      into this page — that's what keeps line spacing/image sizing correct.
-     The iframe has no allow-scripts/allow-forms/allow-top-navigation, and
-     its own document gets a pointer-events:none override injected before
-     it's shown, so nothing inside it is clickable. It's auto-sized to its
-     content's height and never scrolls on its own — the outer page scrolls
-     as one normal static document. */
-  #mirror { width: 100%; border: 0; display: block; margin-top: 24px; border-top: 1px solid #eee; padding-top: 16px; }
+     The iframe's sandbox attribute grants NOTHING (no allow-scripts,
+     allow-forms, allow-same-origin, allow-top-navigation, ...), and its own
+     document also gets a pointer-events:none override injected before it's
+     shown, so nothing inside it is clickable even by accident. Because it
+     has no allow-same-origin, we can't read its contentDocument to measure
+     content height (see the script below) — so instead of auto-sizing to
+     content, it's a fixed-height box that scrolls internally. */
+  #mirror { width: 100%; height: 75vh; border: 1px solid #eee; border-radius: 8px; display: block; margin-top: 24px; }
 </style>
 </head>
 <body>
@@ -42,7 +44,18 @@
 </form>
 <div id="status"></div>
 
-<iframe id="mirror" sandbox="allow-same-origin" scrolling="no" title="미러링된 글"></iframe>
+<!--
+  sandbox with an empty value = every restriction on, nothing granted back.
+  DO NOT add "allow-scripts" to this later without re-reading this comment:
+  allow-same-origin + allow-scripts together let script running inside the
+  frame reach out and script the parent document — i.e. take over this
+  GitHub Pages origin — which fully defeats the sandbox. That combination is
+  the one thing this attribute must never have both halves of at once. We
+  don't need allow-same-origin at all right now (see the CSS comment above
+  for why), so it isn't here; if a future feature seems to need it, that's
+  a sign to redesign around postMessage instead, not to add the token.
+-->
+<iframe id="mirror" sandbox title="미러링된 글"></iframe>
 
 <script>
 (() => {
@@ -88,37 +101,15 @@
   const INERT_STYLE = "<style>*,*::before,*::after{pointer-events:none !important;}</style>";
 
   function renderMirror(html) {
-    // Inject before </head> so it's the last head rule (wins ties) without
-    // disturbing <base>, which HeadInjector on the Worker already put first.
+    // Inject before </head> so it's the last head rule and wins ties.
     const withInert = html.includes("</head>")
       ? html.replace("</head>", INERT_STYLE + "</head>")
       : INERT_STYLE + html;
 
-    mirror.style.height = "0px";
+    // No contentDocument reach-in here — the frame has no allow-same-origin
+    // (see the iframe's own comment), so there's nothing to measure from
+    // out here. #mirror is a fixed-height box in CSS; it scrolls internally.
     mirror.srcdoc = withInert;
-    mirror.onload = () => {
-      let doc;
-      try {
-        doc = mirror.contentDocument;
-      } catch {
-        mirror.style.height = "2000px";
-        return;
-      }
-
-      const resize = () => { mirror.style.height = doc.documentElement.scrollHeight + "px"; };
-      resize();
-
-      // Images are eager-loaded (server-side), so by the time `load` fires
-      // they should already be done — but re-measure on each one anyway as
-      // a safety net against any that were still mid-flight, so the frame
-      // never ends up shorter than the content it's showing.
-      Array.from(doc.images).forEach((img) => {
-        if (!img.complete) {
-          img.addEventListener("load", resize, { once: true });
-          img.addEventListener("error", resize, { once: true });
-        }
-      });
-    };
   }
 
   form.addEventListener("submit", async (e) => {
@@ -129,7 +120,6 @@
     submitBtn.disabled = true;
     statusEl.textContent = "불러오는 중...";
     mirror.removeAttribute("srcdoc");
-    mirror.style.height = "0px";
 
     try {
       const d = await encryptUrl(rawUrl);
