@@ -20,14 +20,15 @@
   button:disabled { background: #999; cursor: default; }
   #status { font-size: 13px; color: #888; min-height: 18px; }
 
-  /* everything mirrorLog renders from the fetched post is read-only —
-     pointer-events is blocked on the whole subtree so nothing in the
-     original page (links, buttons, embedded widgets) can be clicked,
-     even if the source HTML sets its own inline pointer-events. */
-  #mirror, #mirror * { pointer-events: none !important; }
-  #mirror { margin-top: 24px; border-top: 1px solid #eee; padding-top: 16px; }
-  #mirror img, #mirror video { max-width: 100%; height: auto; display: block; margin: 12px 0; }
-  #mirror a { color: inherit; text-decoration: none; cursor: default; }
+  /* The fetched post renders inside a sandboxed iframe (its own document,
+     with Naver's original stylesheets intact) instead of being spliced
+     into this page — that's what keeps line spacing/image sizing correct.
+     The iframe has no allow-scripts/allow-forms/allow-top-navigation, and
+     its own document gets a pointer-events:none override injected before
+     it's shown, so nothing inside it is clickable. It's auto-sized to its
+     content's height and never scrolls on its own — the outer page scrolls
+     as one normal static document. */
+  #mirror { width: 100%; border: 0; display: block; margin-top: 24px; border-top: 1px solid #eee; padding-top: 16px; }
 </style>
 </head>
 <body>
@@ -41,7 +42,7 @@
 </form>
 <div id="status"></div>
 
-<div id="mirror"></div>
+<iframe id="mirror" sandbox="allow-same-origin" scrolling="no" title="미러링된 글"></iframe>
 
 <script>
 (() => {
@@ -84,13 +85,24 @@
     return bytesToBase64url(combined);
   }
 
+  const INERT_STYLE = "<style>*,*::before,*::after{pointer-events:none !important;}</style>";
+
   function renderMirror(html) {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    doc.querySelectorAll("script").forEach((el) => el.remove());
-    doc.querySelectorAll("a").forEach((el) => el.removeAttribute("href"));
-    doc.querySelectorAll("[onclick]").forEach((el) => el.removeAttribute("onclick"));
-    doc.querySelectorAll("button, input, select, textarea").forEach((el) => el.setAttribute("disabled", "disabled"));
-    mirror.innerHTML = doc.body.innerHTML;
+    // Inject before </head> so it's the last head rule (wins ties) without
+    // disturbing <base>, which HeadInjector on the Worker already put first.
+    const withInert = html.includes("</head>")
+      ? html.replace("</head>", INERT_STYLE + "</head>")
+      : INERT_STYLE + html;
+
+    mirror.style.height = "0px";
+    mirror.srcdoc = withInert;
+    mirror.onload = () => {
+      try {
+        mirror.style.height = mirror.contentDocument.documentElement.scrollHeight + "px";
+      } catch {
+        mirror.style.height = "2000px";
+      }
+    };
   }
 
   form.addEventListener("submit", async (e) => {
@@ -100,7 +112,8 @@
 
     submitBtn.disabled = true;
     statusEl.textContent = "불러오는 중...";
-    mirror.innerHTML = "";
+    mirror.removeAttribute("srcdoc");
+    mirror.style.height = "0px";
 
     try {
       const d = await encryptUrl(rawUrl);
