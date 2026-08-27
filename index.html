@@ -112,27 +112,79 @@
     mirror.srcdoc = withInert;
   }
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const rawUrl = input.value.trim();
-    if (!rawUrl) return;
+  // Client-side cache keyed by the raw blog URL, not the network response —
+  // /api/read is Cache-Control: no-store and its `d` param is a different
+  // ciphertext every time (fresh random IV per encryptUrl call), so plain
+  // HTTP caching never has a matching URL to key off of. Storing the
+  // rendered HTML in localStorage sidesteps that entirely, at the cost of
+  // possibly showing a stale copy if the post was edited since — the
+  // "새로고침" link forces a real refetch when that matters.
+  const CACHE_PREFIX = "mirrorlog:cache:";
+  const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+  function readCache(rawUrl) {
+    try {
+      const raw = localStorage.getItem(CACHE_PREFIX + rawUrl);
+      if (!raw) return null;
+      const { html, ts } = JSON.parse(raw);
+      return Date.now() - ts < CACHE_TTL_MS ? html : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeCache(rawUrl, html) {
+    try {
+      localStorage.setItem(CACHE_PREFIX + rawUrl, JSON.stringify({ html, ts: Date.now() }));
+    } catch {
+      // Storage full or unavailable (e.g. private browsing) — caching is
+      // just a speed-up, so silently skip it rather than fail the load.
+    }
+  }
+
+  function showStatus(label, rawUrl) {
+    statusEl.innerHTML = `${label} · <a href="#" id="refreshLink">새로고침</a>`;
+    document.getElementById("refreshLink").addEventListener("click", (e) => {
+      e.preventDefault();
+      loadPost(rawUrl, true);
+    });
+  }
+
+  async function loadPost(rawUrl, forceRefresh) {
     submitBtn.disabled = true;
-    statusEl.textContent = "불러오는 중...";
     mirror.removeAttribute("srcdoc");
 
+    if (!forceRefresh) {
+      const cached = readCache(rawUrl);
+      if (cached) {
+        renderMirror(cached);
+        showStatus("캐시에서 불러옴", rawUrl);
+        submitBtn.disabled = false;
+        return;
+      }
+    }
+
+    statusEl.textContent = "불러오는 중...";
     try {
       const d = await encryptUrl(rawUrl);
       const res = await fetch(`${WORKER_URL}/api/read?d=${encodeURIComponent(d)}`);
       if (!res.ok) throw new Error(await res.text());
       const html = await res.text();
       renderMirror(html);
-      statusEl.textContent = "";
+      writeCache(rawUrl, html);
+      showStatus("새로 불러옴", rawUrl);
     } catch (err) {
       statusEl.textContent = "불러오기 실패: " + err.message;
     } finally {
       submitBtn.disabled = false;
     }
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const rawUrl = input.value.trim();
+    if (!rawUrl) return;
+    loadPost(rawUrl, false);
   });
 })();
 </script>
